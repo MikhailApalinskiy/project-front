@@ -6,6 +6,288 @@
 </head>
 <body>
 <h1>RPG admin panel</h1>
+<h2>Account list:</h2>
+<label for="pageSizeSelect">Count per page:</label>
+<select id="pageSizeSelect">
+    <option value="3">3</option>
+    <option value="5">5</option>
+    <option value="10">10</option>
+    <option value="20">20</option>
+</select>
+<table id="table">
+    <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Title</th>
+        <th>Race</th>
+        <th>Profession</th>
+        <th>Level</th>
+        <th>Birthday</th>
+        <th>Banned</th>
+        <th>Edit</th>
+        <th>Delete</th>
+    </tr>
+</table>
+<div id="pagination">
+    <button>1</button>
+    <button>2</button>
+    <button style="font-weight: bold; background-color: #ddd;">3</button>
+</div>
+<hr>
+<h3>Create new account:</h3>
+<form id="createForm" style="display: flex; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+    <label>Name:
+        <input type="text" id="newName" maxlength="12" required>
+    </label>
+    <label>Title:
+        <input type="text" id="newTitle" maxlength="30">
+    </label>
+    <label>Race:
+        <select id="newRace">
+            <option value="HUMAN">HUMAN</option>
+            <option value="DWARF">DWARF</option>
+            <option value="ELF">ELF</option>
+            <option value="GIANT">GIANT</option>
+            <option value="ORC">ORC</option>
+            <option value="TROLL">TROLL</option>
+            <option value="HOBBIT">HOBBIT</option>
+        </select>
+    </label>
+    <label>Profession:
+        <select id="newProfession">
+            <option value="WARRIOR">WARRIOR</option>
+            <option value="ROGUE">ROGUE</option>
+            <option value="SORCERER">SORCERER</option>
+            <option value="CLERIC">CLERIC</option>
+            <option value="PALADIN">PALADIN</option>
+            <option value="NAZGUL">NAZGUL</option>
+            <option value="WARLOCK">WARLOCK</option>
+            <option value="DRUID">DRUID</option>
+        </select>
+    </label>
+    <label>Level:
+        <input type="number" id="newLevel" min="0" max="100">
+    </label>
+    <label>Birthday:
+        <input type="date" id="newBirthday">
+    </label>
+    <div class="form-field checkbox-field">
+        <label for="newBanned">Banned:</label>
+        <input type="checkbox" id="newBanned" disabled>
+    </div>
+    <button type="submit" style="height: 40px; padding: 0 20px;">Create</button>
+</form>
+<script>
+    let playersPerPage = 3;
+    let currentPage = 0;
+    let totalPlayers = 0;
+    let totalPages = 0;
+    $(document).ready(function () {
+        loadPlayerCount(() => {
+            loadPlayers(0);
+        });
+        $('#pageSizeSelect').on('change', function () {
+            playersPerPage = parseInt($(this).val());
+            loadPlayerCount(() => loadPlayers(0));
+        });
+    });
 
+    function loadPlayerCount(callback) {
+        $.ajax({
+            url: '/rest/players/count',
+            method: 'GET',
+            success: function (count) {
+                totalPlayers = count;
+                if (callback) callback();
+            }
+        });
+    }
+
+    function loadPlayers(page) {
+        currentPage = page;
+        playersPerPage = parseInt($('#pageSizeSelect').val());
+        totalPages = Math.ceil(totalPlayers / playersPerPage);
+        $.ajax({
+            url: `/rest/players?pageNumber=${page}&pageSize=${playersPerPage}`,
+            method: 'GET',
+            success: function (players) {
+                $('#table tr:gt(0)').remove();
+                players.forEach(function (player, index) {
+                    const row = $('<tr></tr>');
+                    row.append(`<td>${page * playersPerPage + index + 1}</td>`);
+                    row.append(`<td>${player.name}</td>`);
+                    row.append(`<td>${player.title}</td>`);
+                    row.append(`<td>${player.race}</td>`);
+                    row.append(`<td>${player.profession}</td>`);
+                    row.append(`<td>${player.level}</td>`);
+                    row.append(`<td>${new Date(player.birthday).toLocaleDateString()}</td>`);
+                    row.append(`<td>${player.banned ? "Yes" : "No"}</td>`);
+                    const editIcon = $('<img>')
+                        .attr('src', 'https://img.icons8.com/ios-filled/20/000000/edit--v1.png')
+                        .attr('alt', 'Edit')
+                        .addClass('icon-button')
+                        .on('click', function () {
+                            enterEditMode(row, editIcon, deleteIcon, player);
+                        });
+                    row.append($('<td>').append(editIcon));
+                    const deleteIcon = $('<img>')
+                        .attr('src', 'https://img.icons8.com/ios-filled/20/000000/delete-sign.png')
+                        .attr('alt', 'Delete')
+                        .addClass('icon-button')
+                        .on('click', function () {
+                            deletePlayer(player.id);
+                        });
+                    row.append($('<td>').append(deleteIcon));
+                    $('#table').append(row);
+                });
+                $('#pagination').html('');
+                for (let i = 0; i < totalPages; i++) {
+                    const btn = $(`<button>${i + 1}</button>`);
+                    if (i === currentPage) {
+                        btn.addClass('active-page');
+                    }
+                    btn.addClass('pagination-button');
+                    btn.on('click', function () {
+                        loadPlayers(i);
+                    });
+                    $('#pagination').append(btn);
+                }
+            }
+        });
+    }
+
+    function deletePlayer(id) {
+        $.ajax({
+            url: `/rest/players/${id}`,
+            method: 'DELETE',
+            success: function () {
+                alert("Player deleted successfully.");
+                loadPlayerCount(() => loadPlayers(currentPage));
+            },
+            error: function (xhr) {
+                if (xhr.status === 404) {
+                    alert("Player not found (404).");
+                } else if (xhr.status === 400) {
+                    alert("Invalid ID (400).");
+                } else {
+                    alert("Unexpected error during deletion.");
+                }
+            }
+        });
+    }
+
+    function enterEditMode(row, editIcon, deleteIcon, player) {
+        deleteIcon.hide();
+        const nameInput = $(`<input type="text" value="${player.name}">`);
+        const titleInput = $(`<input type="text" value="${player.title}">`);
+        const raceSelect = $('<select></select>');
+        const professionSelect = $('<select></select>');
+        const bannedCheckbox = $(`<input type="checkbox" ${player.banned ? 'checked' : ''}>`);
+        const races = [
+            'HUMAN',
+            'DWARF',
+            'ELF',
+            'GIANT',
+            'ORC',
+            'TROLL',
+            'HOBBIT'
+        ];
+        const professions = [
+            'WARRIOR',
+            'ROGUE',
+            'SORCERER',
+            'CLERIC',
+            'PALADIN',
+            'NAZGUL',
+            'WARLOCK',
+            'DRUID'
+        ];
+        races.forEach(r => raceSelect.append(`<option value="${r}" ${r === player.race ? 'selected' : ''}>${r}</option>`));
+        professions.forEach(p => professionSelect.append(`<option value="${p}" ${p === player.profession ? 'selected' : ''}>${p}</option>`));
+        row.children().eq(1).html(nameInput);
+        row.children().eq(2).html(titleInput);
+        row.children().eq(3).html(raceSelect);
+        row.children().eq(4).html(professionSelect);
+        row.children().eq(7).html(bannedCheckbox);
+        editIcon.attr('src', 'https://img.icons8.com/ios-filled/20/000000/save--v1.png');
+        editIcon.attr('alt', 'Save');
+        editIcon.off('click');
+        editIcon.on('click', function () {
+            const updatedData = {};
+            const nameVal = nameInput.val();
+            const titleVal = titleInput.val();
+            const raceVal = raceSelect.val();
+            const professionVal = professionSelect.val();
+            const bannedVal = bannedCheckbox.is(':checked');
+            if (nameVal !== '') updatedData.name = nameVal;
+            if (titleVal !== '') updatedData.title = titleVal;
+            if (raceVal !== '') updatedData.race = raceVal;
+            if (professionVal !== '') updatedData.profession = professionVal;
+            updatedData.banned = bannedVal;
+            $.ajax({
+                url: `/rest/players/${player.id}`,
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(updatedData),
+                success: function () {
+                    alert("Player updated successfully.");
+                    loadPlayerCount(() => loadPlayers(currentPage));
+                },
+                error: function (xhr) {
+                    if (xhr.status === 404) {
+                        alert("Player not found (404).");
+                    } else if (xhr.status === 400) {
+                        alert("Invalid ID (400).");
+                    } else {
+                        alert("Unexpected error during update.");
+                    }
+                }
+            });
+        });
+    }
+
+    $('#createForm').on('submit', function (e) {
+        e.preventDefault();
+        const name = $('#newName').val().trim();
+        const title = $('#newTitle').val().trim();
+        const race = $('#newRace').val();
+        const profession = $('#newProfession').val();
+        const level = parseInt($('#newLevel').val());
+        const birthdayInput = $('#newBirthday').val();
+        const banned = $('#newBanned').is(':checked');
+        const birthday = birthdayInput ? new Date(birthdayInput).getTime() : null;
+        if (!name || name.length > 12) return alert('The name is required and should be no more than 12 characters.');
+        if (title.length > 30) return alert('Title should not exceed 30 characters.');
+        if (isNaN(level) || level < 0 || level > 100) return alert('Level must be between 0 and 100.');
+        if (!birthdayInput || birthday < 0) return alert('Birthday is required and must be valid.');
+        const newPlayer = {
+            name,
+            title,
+            race,
+            profession,
+            birthday,
+            level,
+            banned
+        };
+        $.ajax({
+            url: '/rest/players',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(newPlayer),
+            success: function () {
+                alert('The player has been successfully created!');
+                $('#createForm')[0].reset();
+                loadPlayerCount(() => loadPlayers(currentPage));
+            },
+            error: function (xhr) {
+                if (xhr.status === 400) {
+                    alert('Incorrect data (error 400)');
+                } else {
+                    alert('Error when creating a player: ' + xhr.status);
+                }
+            }
+        });
+    });
+</script>
 </body>
 </html>
